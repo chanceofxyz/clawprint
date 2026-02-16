@@ -57,6 +57,9 @@ impl Ledger {
 
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")?;
 
+        // Ensure Cryptowerk sealing tables exist in this ledger DB
+        crate::sealing::schema::ensure_sealing_tables(&db)?;
+
         db.execute(
             "CREATE TABLE IF NOT EXISTS events (
                 event_id    INTEGER PRIMARY KEY AUTOINCREMENT,

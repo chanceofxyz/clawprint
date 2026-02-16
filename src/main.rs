@@ -10,10 +10,12 @@
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use owo_colors::OwoColorize;
+use rusqlite::Connection;
 use std::io::{IsTerminal, Write as _};
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 use tracing::{info, warn};
 
 static USE_COLOR: AtomicBool = AtomicBool::new(true);
@@ -121,7 +123,18 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+enum SealCommands {
+    /// Smoke test for sealing DA layer (creates dummy batch + member)
+    Test,
+}
+
+#[derive(Subcommand)]
 enum Commands {
+    /// Sealing-related commands
+    Seal {
+        #[command(subcommand)]
+        command: SealCommands,
+    },
     /// Record agent runs from gateway
     Record {
         /// Gateway WebSocket URL
@@ -314,6 +327,53 @@ enum Commands {
     },
 }
 
+fn seal_test() -> Result<()> {
+    // Use default clawprints directory
+    let out_dir = PathBuf::from("./clawprints");
+    std::fs::create_dir_all(&out_dir)?;
+
+    let db_path = out_dir.join("ledger.sqlite");
+    let mut conn = Connection::open(&db_path)?;
+
+    // Ensure sealing tables exist
+    clawprint::sealing::schema::ensure_sealing_tables(&conn)?;
+
+    // Insert a dummy batch + member
+    let now_ms = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis() as i64;
+    let batch_id = format!("seal_test_{}", now_ms);
+
+    let batch = clawprint::sealing::db::SealBatchRow {
+        batch_id: batch_id.clone(),
+        created_at_ms: now_ms,
+        status: "CREATED".to_string(),
+        api_base_url: None,
+        callback_spec: None,
+        hash_algorithm: "sha256".to_string(),
+        hash_count: 1,
+        hash_length_bytes: 32,
+    };
+
+    let member = clawprint::sealing::db::SealBatchMemberRow {
+        seq: 0,
+        hash_hex: "00".repeat(32),
+        lookup_info: Some("seal_test".to_string()),
+        source_type: "LEDGER_ROOT".to_string(),
+        source_ref: Some("seal_test".to_string()),
+    };
+
+    clawprint::sealing::db::insert_batch_with_members(&mut conn, batch, vec![member])?;
+
+    cprintln!(
+        "  {} batch_id={}",
+        "OK seal test inserted".green().bold(),
+        batch_id.bright_blue()
+    );
+
+    Ok(())
+}
+
 fn format_duration(secs: i64) -> String {
     let hours = secs / 3600;
     let mins = (secs % 3600) / 60;
@@ -416,6 +476,11 @@ async fn main() -> Result<()> {
         .init();
 
     match cli.command {
+        Commands::Seal { command } => match command {
+            SealCommands::Test => {
+                seal_test()?;
+            }
+        },
         Commands::Record {
             gateway,
             out,

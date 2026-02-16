@@ -18,6 +18,7 @@ pub mod replay;
 pub mod security;
 pub mod storage;
 pub mod viewer;
+pub mod sealing;
 
 /// Unique identifier for a recorded run
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
