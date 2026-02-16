@@ -126,6 +126,10 @@ struct Cli {
 enum SealCommands {
     /// Smoke test for sealing DA layer (creates dummy batch + member)
     Test,
+    /// Plan sealing batches without touching the network or DB
+    Plan,
+    /// Register planned batches with Cryptowerk (when configured)
+    Register,
 }
 
 #[derive(Subcommand)]
@@ -327,6 +331,37 @@ enum Commands {
     },
 }
 
+fn seal_plan() -> Result<()> {
+    // For now, we don't have real candidates wired; just print zero-plan output.
+    // This will be extended in later PRs to inspect ledger checkpoints, run roots, etc.
+    cprintln!("  {}", "Sealing plan: 0 candidates, 0 batches".yellow());
+    Ok(())
+}
+
+fn seal_register() -> Result<()> {
+    // Temporary stub: just report config presence. Full Cryptowerk integration comes next.
+    let key = std::env::var("CLAWPRINT_CRYPTOWERK_API_KEY").ok();
+    let cred = std::env::var("CLAWPRINT_CRYPTOWERK_API_CREDENTIAL").ok();
+
+    match (key, cred) {
+        (Some(_), Some(_)) => {
+            cprintln!(
+                "  {}",
+                "Cryptowerk configured; register flow not implemented yet in this build".yellow()
+            );
+        }
+        _ => {
+            cprintln!(
+                "  {}",
+                "Cryptowerk not configured (missing CLAWPRINT_CRYPTOWERK_API_KEY / _CREDENTIAL)"
+                    .yellow()
+            );
+        }
+    }
+
+    Ok(())
+}
+
 fn seal_test() -> Result<()> {
     // Use default clawprints directory
     let out_dir = PathBuf::from("./clawprints");
@@ -479,6 +514,12 @@ async fn main() -> Result<()> {
         Commands::Seal { command } => match command {
             SealCommands::Test => {
                 seal_test()?;
+            }
+            SealCommands::Plan => {
+                seal_plan()?;
+            }
+            SealCommands::Register => {
+                seal_register()?;
             }
         },
         Commands::Record {

@@ -1,4 +1,5 @@
-use rusqlite::{params, Connection, Result, Transaction};
+use rusqlite::{Connection, Result, Transaction, params};
+use std::collections::HashSet;
 
 /// Row in seal_batches representing a single bulk register attempt.
 #[derive(Debug, Clone)]
@@ -8,9 +9,9 @@ pub struct SealBatchRow {
     pub status: String, // CREATED | SUBMITTED | SEALED | FAILED
     pub api_base_url: Option<String>,
     pub callback_spec: Option<String>,
-    pub hash_algorithm: String,   // e.g. "sha256"
+    pub hash_algorithm: String, // e.g. "sha256"
     pub hash_count: i64,
-    pub hash_length_bytes: i64,   // usually 32
+    pub hash_length_bytes: i64, // usually 32
 }
 
 /// Row in seal_batch_members: manifest of what was sealed.
@@ -19,7 +20,7 @@ pub struct SealBatchMemberRow {
     pub seq: i64,
     pub hash_hex: String,
     pub lookup_info: Option<String>,
-    pub source_type: String,       // RUN_ROOT | LEDGER_ROOT | ARTIFACT
+    pub source_type: String, // RUN_ROOT | LEDGER_ROOT | ARTIFACT
     pub source_ref: Option<String>,
 }
 
@@ -90,4 +91,16 @@ fn insert_batch_with_members_tx(
     }
 
     Ok(())
+}
+
+/// Return all existing member hashes (hash_hex) for dedupe.
+pub fn all_member_hashes(conn: &Connection) -> Result<HashSet<String>> {
+    let mut stmt = conn.prepare("SELECT hash_hex FROM seal_batch_members")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    let mut set = HashSet::new();
+    for row in rows {
+        let h = row?;
+        set.insert(h);
+    }
+    Ok(set)
 }
